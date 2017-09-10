@@ -1,0 +1,156 @@
+options{
+	LOOKAHEAD=1;
+}
+PARSER_BEGIN(Calculadora)
+import java.util.HashMap;
+import java.util.Map;
+	public class Calculadora{
+		static int dolarin = 0;
+		static Map<String, Integer> variables = new HashMap();
+		public static void main(String args[])throws ParseException{
+			Calculadora miParser = new Calculadora(System.in);
+			miParser.sesion();
+		}
+	}
+PARSER_END(Calculadora)
+
+SKIP:{
+	" "
+}
+
+TOKEN[IGNORE_CASE]:{
+			<EOL: ("\r\n"|"\r"|"\n") > {/*Caracteres definidos como fin de linea*/}
+		|	<DECIMAL: ((["0"-"9"])+)> {/*Numero decimal definido como secuencia de cifras entre 0 y 9*/}
+		|	<OCTAL: ("o"(["0"-"7"])+)> {/*Numero octal definido como una "o" seguida de una secuencia de cifras entre 0 y 7*/}
+		|	<BINARIO: ("b"(["0"-"1"])+)> {/*Numero binario definido como una "b" seguida de una secuencia de 0 y 1*/}
+		|	<ID: (["a"-"z"])+> {/*ID definido como una secuencia de caracteres*/}
+		|	<SUMA: ("+")> {/*Operador suma definido como el caracter "+"*/}
+		|	<RESTA: ("-")> {/*Operador resta definido como el caracter "-"*/}
+		|	<MULTIPLICACION: ("*")> {/*Operador multiplicacion definido como el caracter "*"*/}
+		|	<DIVISION: ("/")> {/*Operador division definido como el caracter "/"*/}
+		| <RELACIONAL: ("<"|">"|">="|"<="|"=="|"!=")> {/*Operador relacional definido como "<"|">"|">="|"<="|"=="|"!="*/}
+}
+
+void sesion():{System.out.println("Calculadora$: ");}{
+	(linea() {/*Una sesion está formada por una o mas lineas y un token fin de linea*/})+ <EOF>
+}
+
+void linea():{int num=0/*Definimos num y lo usamos para almacenar el resultado de la linea.*//*Se usa LOOKAHEAD para leer dos caracteres y poder usar la funcion adecuada sin tener que retroceder.*/;/*Una linea se compone de:*/}
+{
+	(
+			LOOKAHEAD(2)num = asignacion() {/*Una asignacion*/}
+		|	LOOKAHEAD(2)num = expresion() {/*o na expresion*/}
+		|	LOOKAHEAD(2)num = condicional() {/*o una expresion condicional.*/}
+	)?
+	 <EOL>{/*Y un final de linea.*/System.out.println(num+"\r\nCalculadora$: ");}
+}
+
+int asignacion():{String variable; int valor;}
+{
+	(
+		<ID>{variable = token.image;/*token.image obtiene el lexema del token ID que lo utilizaremos como identificador de la variable*/} "=" valor = expresion(){/**/}
+	)
+	{/*Almacenamos en la tabla de variables el valor */
+		variables.put(variable, valor);
+		dolarin=valor;
+		return valor;
+	}
+}
+
+int expresion():{int sum1=0; int sum2=0;}{
+		sum1 = termino()
+		(
+			(	<SUMA> sum2 = termino(){sum1+=sum2;})	|	(	<RESTA> sum2 = termino(){sum1-=sum2;})	)*
+		{
+			dolarin=sum1;
+			return sum1;
+		}
+}
+
+int termino():{int div1=0;int div2=0;}{
+		div1 = factor()
+		(
+			(	<MULTIPLICACION> div2 = factor(){div1*=div2;})	|	(	<DIVISION> div2 = factor(){div1/=div2;})	)*
+		{
+			dolarin=div1;
+			return div1;
+		}
+}
+
+int condicional():{int izquierda, derecha, cierto, falso;boolean resul =true;}{
+	(
+		"("izquierda=expresion()<RELACIONAL>
+		{
+			String signo = token.image;
+		}
+		derecha=expresion()")?"(LOOKAHEAD(3)cierto=expresion()|LOOKAHEAD(3)cierto=termino()|cierto=factor())":"(LOOKAHEAD(3)falso=expresion()|LOOKAHEAD(3)falso=termino()|falso=factor())
+		{
+		switch (signo) {
+											case "<":
+													resul = izquierda < derecha;
+													break;
+											case ">":
+													resul = izquierda > derecha;
+													break;
+											case "==":
+													resul = izquierda == derecha;
+													break;
+											case "!=":
+													resul = izquierda != derecha;
+													break;
+											case ">=":
+													resul = izquierda >= derecha;
+													break;
+											case "<=":
+													resul = izquierda <= derecha;
+													break;
+											default:
+													break;
+									}
+			dolarin=resul?cierto:falso;
+			return dolarin;
+		}
+	)
+}
+
+int factor():{int valor;int simbolo = 1; String numero;}{
+	(<RESTA>{simbolo = -1;})?
+	(
+		 "("valor = expresion()")"
+		|"$"{return simbolo*dolarin;}
+		|<ID>
+			{
+				dolarin = variables.get(token.image);
+				return simbolo*variables.get(token.image);
+			}
+		|valor = numero()
+			{
+				dolarin = valor;
+				return simbolo*dolarin;
+			}
+	)
+}
+
+	int numero():{String numero;int valor;}{
+	<DECIMAL>
+		{
+			numero = token.image;
+			valor = Integer.parseInt(numero);
+			dolarin = valor;
+			return valor;
+		}
+	| <OCTAL>
+		{
+			numero = token.image;
+			valor = Integer.parseInt(numero.substring(1),8);
+			dolarin = valor;
+			return valor;
+		}
+	| <BINARIO>
+		{
+			numero = token.image;
+			valor = Integer.parseInt(numero.substring(1),2);
+			dolarin = valor;
+			return valor;
+		}
+	}
